@@ -1,0 +1,9 @@
+__pycache__/
+*.py[cod]
+*.pyo
+.DS_Store
+figures/
+results_*.csv
+attribution_results.csv
+*.egg-info/
+.env
