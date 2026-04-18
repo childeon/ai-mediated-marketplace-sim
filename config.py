@@ -20,9 +20,9 @@ CUISINES = ["Italian", "Chinese", "Indian", "Mexican", "Japanese", "American"]
 
 # ── Platform parameters ────────────────────────────────────────────────────────
 PLATFORM_PARAMS = [
-    {"name": "QuickEats",  "commission": 0.20, "delivery_fee_range": (2.0, 5.0), "subsidy_budget": 5000},
-    {"name": "FoodRush",   "commission": 0.25, "delivery_fee_range": (1.0, 4.0), "subsidy_budget": 8000},
-    {"name": "NomNom",     "commission": 0.15, "delivery_fee_range": (3.0, 8.0), "subsidy_budget": 3000},
+    {"name": "QuickEats",  "commission": 0.20, "delivery_fee_range": (2.0, 5.0), "subsidy_budget": 5000, "logistics_time_range": (10, 25)},
+    {"name": "FoodRush",   "commission": 0.25, "delivery_fee_range": (1.0, 4.0), "subsidy_budget": 8000, "logistics_time_range": (15, 30)},
+    {"name": "NomNom",     "commission": 0.15, "delivery_fee_range": (3.0, 8.0), "subsidy_budget": 3000, "logistics_time_range": (20, 35)},
 ]
 
 # Per-order sponsorship payment FROM platforms TO LLM under each mechanism.
@@ -32,7 +32,8 @@ LLM_SPONSORSHIP_CPA  = {"QuickEats": 1.50, "FoodRush": 2.00, "NomNom": 1.00}  # 
 LLM_SPONSORSHIP_CPFI = {"QuickEats": 2.00, "FoodRush": 2.50, "NomNom": 1.50}  # per fulfilled intent
 
 # ── Restaurant parameters ──────────────────────────────────────────────────────
-RESTAURANT_QUALITY_RANGE    = (0.4, 1.0)
+RESTAURANT_QUALITY_RANGE    = (2.0, 5.0)   # star ratings displayed as 1–5 ★ (half-star precision)
+QUALITY_SCALE               = 5.0           # divide by this to normalise quality to [0, 1] internally
 RESTAURANT_PRICE_RANGE      = (10.0, 35.0)
 RESTAURANT_PREP_TIME_RANGE  = (5, 25)    # minutes (restaurant-side component)
 RESTAURANT_COST_RATIO_RANGE = (0.30, 0.60)   # production cost as fraction of menu price

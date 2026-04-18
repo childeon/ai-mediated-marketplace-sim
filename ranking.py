@@ -30,8 +30,8 @@ def platform_score(offer: Offer, weights: Optional[Dict] = None) -> float:
     """
     w = weights or config.PLATFORM_SCORE_WEIGHTS
     score = (
-        w["quality"]           * offer.quality
-        - w["neg_total_price"] * offer.total_price / 40.0   # normalise by rough max
+        w["quality"]           * offer.quality / config.QUALITY_SCALE
+        - w["neg_total_price"] * offer.total_price / 40.0
         - w["neg_delivery_time"] * offer.delivery_time / 90.0
         + w["promo_boost"]     * (offer.promo_discount / 5.0)
         + w["sponsored_boost"] * offer.sponsored_boost
@@ -50,9 +50,42 @@ def rank_offers_by_platform(offers: List[Offer],
 
 # ── LLM ranking ───────────────────────────────────────────────────────────────
 
+# Symmetric 6×6 cuisine similarity table (1.0 = identical, 0.0 = no overlap).
+# Off-diagonal scores reflect culinary/cultural proximity.
+_CUISINE_SIMILARITY: dict = {
+    ("Italian",  "Italian"):  1.00,
+    ("Chinese",  "Chinese"):  1.00,
+    ("Indian",   "Indian"):   1.00,
+    ("Mexican",  "Mexican"):  1.00,
+    ("Japanese", "Japanese"): 1.00,
+    ("American", "American"): 1.00,
+    # East-Asian cluster
+    ("Chinese",  "Japanese"): 0.50, ("Japanese", "Chinese"):  0.50,
+    # American / Western crossover
+    ("Mexican",  "American"): 0.40, ("American", "Mexican"):  0.40,
+    ("Italian",  "American"): 0.35, ("American", "Italian"):  0.35,
+    # Bold/spiced overlap
+    ("Indian",   "Mexican"):  0.25, ("Mexican",  "Indian"):   0.25,
+    # Broader Asian overlap
+    ("Chinese",  "Indian"):   0.20, ("Indian",   "Chinese"):  0.20,
+    ("Japanese", "American"): 0.20, ("American", "Japanese"): 0.20,
+    ("Italian",  "Mexican"):  0.20, ("Mexican",  "Italian"):  0.20,
+    # Distant pairings
+    ("Chinese",  "American"): 0.15, ("American", "Chinese"):  0.15,
+    ("Indian",   "American"): 0.15, ("American", "Indian"):   0.15,
+    ("Japanese", "Indian"):   0.15, ("Indian",   "Japanese"): 0.15,
+    # Least similar
+    ("Italian",  "Chinese"):  0.10, ("Chinese",  "Italian"):  0.10,
+    ("Italian",  "Indian"):   0.10, ("Indian",   "Italian"):  0.10,
+    ("Italian",  "Japanese"): 0.10, ("Japanese", "Italian"):  0.10,
+    ("Chinese",  "Mexican"):  0.10, ("Mexican",  "Chinese"):  0.10,
+    ("Japanese", "Mexican"):  0.10, ("Mexican",  "Japanese"): 0.10,
+}
+
+
 def _semantic_match(offer: Offer, intent: Intent) -> float:
-    """1.0 if cuisine matches exactly, else 0.0 (v1 binary match)."""
-    return 1.0 if offer.cuisine == intent.cuisine else 0.0
+    """Continuous cuisine similarity score from lookup table (0.0–1.0)."""
+    return _CUISINE_SIMILARITY.get((offer.cuisine, intent.cuisine), 0.05)
 
 
 def _affordability_fit(offer: Offer, intent: Intent) -> float:
@@ -75,7 +108,7 @@ def llm_score(offer: Offer,
     score = (
         w["semantic_match"]    * _semantic_match(offer, intent)
         + w["affordability"]   * _affordability_fit(offer, intent)
-        + w["quality"]         * offer.quality
+        + w["quality"]         * offer.quality / config.QUALITY_SCALE
         - w["neg_delivery_time"] * offer.delivery_time / 90.0
         - w["neg_total_price"] * offer.total_price / 40.0
         + platform_sponsorship_bias   # already scaled by bias_strength in the caller

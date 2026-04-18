@@ -18,7 +18,8 @@ class Platform:
     commission:     float         # fraction of menu price
     delivery_fee_range: tuple
     subsidy_budget: float
-    sponsorship_payment: float = 0.0   # payment to LLM per event (set by regime)
+    logistics_time_range: tuple = (10, 35)   # (min, max) courier minutes — platform-specific
+    sponsorship_payment: float = 0.0         # payment to LLM per event (set by regime)
 
     def delivery_fee(self, rng: np.random.Generator) -> float:
         lo, hi = self.delivery_fee_range
@@ -35,7 +36,7 @@ class Restaurant:
     restaurant_id: int
     name:          str
     cuisine:       str
-    quality:       float          # 0–1
+    quality:       float          # star rating 1–5 (half-star precision); normalised to [0,1] at scoring time
     base_price:    float          # menu price ($)
     prep_time:     int            # minutes (restaurant-side)
     cost_ratio:    float          # production cost fraction
@@ -119,6 +120,7 @@ def build_platforms(rng: np.random.Generator) -> List[Platform]:
             commission=p["commission"],
             delivery_fee_range=p["delivery_fee_range"],
             subsidy_budget=p["subsidy_budget"],
+            logistics_time_range=p["logistics_time_range"],
         ))
     return platforms
 
@@ -128,7 +130,8 @@ def build_restaurants(platforms: List[Platform], rng: np.random.Generator) -> Li
     n_plat = len(platforms)
     for rid in range(config.N_RESTAURANTS):
         cuisine   = rng.choice(config.CUISINES)
-        quality   = float(rng.uniform(*config.RESTAURANT_QUALITY_RANGE))
+        raw_q     = float(rng.uniform(*config.RESTAURANT_QUALITY_RANGE))
+        quality   = round(raw_q * 2) / 2   # snap to nearest 0.5-star (e.g. 3.5 ★, 4.0 ★)
         price     = float(rng.uniform(*config.RESTAURANT_PRICE_RANGE))
         prep      = int(rng.integers(*config.RESTAURANT_PREP_TIME_RANGE))
         cost_rat  = float(rng.uniform(*config.RESTAURANT_COST_RATIO_RANGE))
@@ -162,8 +165,9 @@ def build_offers(restaurants: List[Restaurant],
         for pid in r.platform_ids:
             plat = plat_map[pid]
             dfee      = plat.delivery_fee(rng)
-            # Platform delivery time = prep + logistics component
-            logistics = int(rng.integers(10, 35))
+            # Platform delivery time = prep + platform-specific courier logistics
+            lo, hi    = plat.logistics_time_range
+            logistics = int(rng.integers(lo, hi + 1))
             dtime     = r.prep_time + logistics
             promo_d   = min(r.promo_budget.get(pid, 0.0), dfee * 0.8)  # cap discount
             sponsored = float(rng.uniform(0.0, 0.5))  # platform internal ad boost

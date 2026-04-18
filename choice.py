@@ -61,7 +61,7 @@ def consumer_utility(consumer:      Consumer,
 
     utility = (
         w["cuisine_match"]   * cuisine_match
-        + w["quality"]       * consumer.quality_sensitivity * offer.quality
+        + w["quality"]       * consumer.quality_sensitivity * offer.quality / config.QUALITY_SCALE
         - w["neg_total_price"] * consumer.price_sensitivity * norm_price
         - w["neg_delivery_time"] * consumer.time_sensitivity * norm_time
         + w["promo_value"]   * promo_val
