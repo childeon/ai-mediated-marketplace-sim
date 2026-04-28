@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="420" viewBox="0 0 900 420">
+<rect width="100%" height="100%" fill="#ffffff"/>
+<text x="90" y="32" font-family="Aptos, Arial" font-size="24" font-weight="700" fill="#16213e">Bias Strength: Welfare vs LLM Revenue</text>
+<line x1="90" y1="55" x2="90" y2="350" stroke="#718096"/>
+<line x1="90" y1="350" x2="860" y2="350" stroke="#718096"/>
+<polyline points="90.0,249.8 218.3,253.7 346.7,261.3 475.0,272.0 603.3,291.9 731.7,311.0 860.0,321.5" fill="none" stroke="#2b6cb0" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="90.0" cy="249.8" r="5" fill="#2b6cb0"/>
+<circle cx="218.3" cy="253.7" r="5" fill="#2b6cb0"/>
+<circle cx="346.7" cy="261.3" r="5" fill="#2b6cb0"/>
+<circle cx="475.0" cy="272.0" r="5" fill="#2b6cb0"/>
+<circle cx="603.3" cy="291.9" r="5" fill="#2b6cb0"/>
+<circle cx="731.7" cy="311.0" r="5" fill="#2b6cb0"/>
+<circle cx="860.0" cy="321.5" r="5" fill="#2b6cb0"/>
+<text x="730" y="80" font-family="Aptos, Arial" font-size="16" fill="#2b6cb0" font-weight="700">Intent fulfilment</text>
+<polyline points="90.0,83.5 218.3,86.3 346.7,97.2 475.0,115.8 603.3,162.4 731.7,198.6 860.0,209.5" fill="none" stroke="#2f855a" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="90.0" cy="83.5" r="5" fill="#2f855a"/>
+<circle cx="218.3" cy="86.3" r="5" fill="#2f855a"/>
+<circle cx="346.7" cy="97.2" r="5" fill="#2f855a"/>
+<circle cx="475.0" cy="115.8" r="5" fill="#2f855a"/>
+<circle cx="603.3" cy="162.4" r="5" fill="#2f855a"/>
+<circle cx="731.7" cy="198.6" r="5" fill="#2f855a"/>
+<circle cx="860.0" cy="209.5" r="5" fill="#2f855a"/>
+<text x="730" y="105" font-family="Aptos, Arial" font-size="16" fill="#2f855a" font-weight="700">Shortlist relevance</text>
+<text x="90.0" y="392" text-anchor="middle" font-family="Aptos, Arial" font-size="14" fill="#2d3748">0.0</text>
+<text x="218.3" y="392" text-anchor="middle" font-family="Aptos, Arial" font-size="14" fill="#2d3748">0.1</text>
+<text x="346.7" y="392" text-anchor="middle" font-family="Aptos, Arial" font-size="14" fill="#2d3748">0.2</text>
+<text x="475.0" y="392" text-anchor="middle" font-family="Aptos, Arial" font-size="14" fill="#2d3748">0.3</text>
+<text x="603.3" y="392" text-anchor="middle" font-family="Aptos, Arial" font-size="14" fill="#2d3748">0.5</text>
+<text x="731.7" y="392" text-anchor="middle" font-family="Aptos, Arial" font-size="14" fill="#2d3748">0.7</text>
+<text x="860.0" y="392" text-anchor="middle" font-family="Aptos, Arial" font-size="14" fill="#2d3748">1.0</text>
+</svg>

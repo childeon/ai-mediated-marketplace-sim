@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="420" viewBox="0 0 900 420">
+<rect width="100%" height="100%" fill="#ffffff"/>
+<text x="90" y="32" font-family="Aptos, Arial" font-size="24" font-weight="700" fill="#16213e">Trust Raises Conversion, Not Match Quality</text>
+<line x1="90" y1="55" x2="90" y2="350" stroke="#718096"/>
+<line x1="90" y1="350" x2="860" y2="350" stroke="#718096"/>
+<polyline points="90.0,233.8 282.5,196.0 475.0,156.6 667.5,117.5 860.0,83.5" fill="none" stroke="#805ad5" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="90.0" cy="233.8" r="5" fill="#805ad5"/>
+<circle cx="282.5" cy="196.0" r="5" fill="#805ad5"/>
+<circle cx="475.0" cy="156.6" r="5" fill="#805ad5"/>
+<circle cx="667.5" cy="117.5" r="5" fill="#805ad5"/>
+<circle cx="860.0" cy="83.5" r="5" fill="#805ad5"/>
+<text x="730" y="80" font-family="Aptos, Arial" font-size="16" fill="#805ad5" font-weight="700">Conversion</text>
+<polyline points="90.0,320.0 282.5,321.1 475.0,321.5 667.5,318.0 860.0,317.8" fill="none" stroke="#2b6cb0" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="90.0" cy="320.0" r="5" fill="#2b6cb0"/>
+<circle cx="282.5" cy="321.1" r="5" fill="#2b6cb0"/>
+<circle cx="475.0" cy="321.5" r="5" fill="#2b6cb0"/>
+<circle cx="667.5" cy="318.0" r="5" fill="#2b6cb0"/>
+<circle cx="860.0" cy="317.8" r="5" fill="#2b6cb0"/>
+<text x="730" y="105" font-family="Aptos, Arial" font-size="16" fill="#2b6cb0" font-weight="700">Intent fulfilment</text>
+<text x="90.0" y="392" text-anchor="middle" font-family="Aptos, Arial" font-size="14" fill="#2d3748">Very</text>
+<text x="282.5" y="392" text-anchor="middle" font-family="Aptos, Arial" font-size="14" fill="#2d3748">Low</text>
+<text x="475.0" y="392" text-anchor="middle" font-family="Aptos, Arial" font-size="14" fill="#2d3748">Medium</text>
+<text x="667.5" y="392" text-anchor="middle" font-family="Aptos, Arial" font-size="14" fill="#2d3748">High</text>
+<text x="860.0" y="392" text-anchor="middle" font-family="Aptos, Arial" font-size="14" fill="#2d3748">Very</text>
+</svg>

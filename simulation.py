@@ -11,7 +11,7 @@ And four LLM monetisation regimes:
 
 from __future__ import annotations
 from dataclasses import dataclass, field
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Union
 import numpy as np
 
 import config
@@ -19,7 +19,7 @@ from entities import (Consumer, Restaurant, Platform, Offer,
                       Intent, build_platforms, build_restaurants,
                       build_offers, build_consumers)
 from ranking import rank_offers_by_platform, llm_shortlist, avg_shortlist_relevance
-from choice import choose_offer, intent_fulfilment
+from choice import choose_offer, click_offer, purchase_clicked_offer, intent_fulfilment
 
 
 # ── Per-order record ──────────────────────────────────────────────────────────
@@ -41,6 +41,11 @@ class OrderRecord:
     platform_delivery_fee: float
     platform_net:        float          # commission + delivery_fee - subsidy_spend - llm_payment
     llm_payment:         float          # payment LLM received for this order
+    clicked:             bool           # LLM world: consumer clicked a recommendation
+    clicked_platform_id: Optional[int]   # platform whose recommendation was clicked
+    payer_platform_id:   Optional[int]   # platform charged by the LLM, if any
+    exposed_restaurant_ids: List[int]     # restaurants shown in feed/shortlist
+    exposed_platform_ids:   List[int]     # platforms shown in feed/shortlist
     world:               str
     regime:              str
     n_platforms_checked: int            # no-LLM world: how many platforms inspected
@@ -55,16 +60,25 @@ def _no_llm_session(consumer:  Consumer,
                     intent:    Intent,
                     rng:       np.random.Generator) -> OrderRecord:
     """
-    Consumer inspects a random subset of platforms and sees top offers from each.
+    Consumer searches their desired cuisine on their 2 highest-loyalty platforms.
+    Each platform returns its top-ranked offers within that cuisine (sponsored
+    slots, ratings, promo boosts — but no cross-platform aggregation).
     """
-    n_plat = len(platforms)
+    n_plat  = len(platforms)
     n_check = min(config.CONSUMER_PLATFORMS_INSPECTED, n_plat)
-    checked_pids = list(rng.choice(n_plat, size=n_check, replace=False))
 
-    # Collect top-5 offers per checked platform (already sorted by platform score)
+    checked_pids = [
+        pid for pid, _ in sorted(
+            consumer.platform_loyalty.items(),
+            key=lambda item: item[1],
+            reverse=True,
+        )[:n_check]
+    ]
+
     visible_offers: List[Offer] = []
     for pid in checked_pids:
-        top = rank_offers_by_platform(offers, pid, top_n=5)
+        top = rank_offers_by_platform(offers, pid, top_n=5,
+                                      cuisine_filter=intent.cuisine)
         visible_offers.extend(top)
 
     chosen, utility = choose_offer(consumer, visible_offers, intent,
@@ -72,40 +86,56 @@ def _no_llm_session(consumer:  Consumer,
 
     return _build_record(consumer, chosen, intent, utility, 0.0,
                          world="no_llm", regime="neutral",
-                         n_platforms=n_check, shortlist_rel=0.0, rng=rng)
+                         n_platforms=n_check, shortlist_rel=0.0, rng=rng,
+                         exposed_offers=visible_offers)
 
 
 # ── World B: LLM ──────────────────────────────────────────────────────────────
 
-def _llm_session(consumer:  Consumer,
-                 offers:    List[Offer],
-                 platforms: List[Platform],
-                 intent:    Intent,
-                 regime:    str,
-                 rng:       np.random.Generator) -> OrderRecord:
+def _llm_session(consumer:     Consumer,
+                 offers:       List[Offer],
+                 platforms:    List[Platform],
+                 intent:       Intent,
+                 regime:       str,
+                 rng:          np.random.Generator,
+                 payment_scale: Union[float, Dict] = 1.0) -> OrderRecord:
     """
     Consumer queries LLM. LLM returns top-K shortlist.
-    Consumer chooses from shortlist (possibly no-purchase).
+    payment_scale: multiply all LLM payments by this factor.
+      1.0 = normal; 0.0 = routing bias preserved but LLM earns nothing
+      (used for two-pass WTP calibration in experiments).
     """
     shortlist = llm_shortlist(offers, intent, platforms, regime=regime)
     rel       = avg_shortlist_relevance(shortlist, intent)
-    chosen, utility = choose_offer(consumer, shortlist, intent,
-                                   from_llm=True, rng=rng)
+    clicked, click_utility = click_offer(consumer, shortlist, intent, rng)
 
-    # Compute LLM payment based on regime
-    llm_pay = _compute_llm_payment(chosen, shortlist, intent, regime)
+    if clicked is None:
+        return _build_record(consumer, None, intent, click_utility, 0.0,
+                             world="llm", regime=regime,
+                             n_platforms=1, shortlist_rel=rel, rng=rng,
+                             clicked_offer=None, exposed_offers=shortlist)
+
+    purchased, utility = purchase_clicked_offer(
+        consumer, clicked, intent, rng, utility=click_utility
+    )
+    chosen = clicked if purchased else None
+
+    llm_pay = _compute_llm_payment(clicked, purchased, intent, regime,
+                                   payment_scale=payment_scale)
 
     return _build_record(consumer, chosen, intent, utility, llm_pay,
                          world="llm", regime=regime,
-                         n_platforms=1, shortlist_rel=rel, rng=rng)
+                         n_platforms=1, shortlist_rel=rel, rng=rng,
+                         clicked_offer=clicked, exposed_offers=shortlist)
 
 
-def _compute_llm_payment(chosen: Optional[Offer],
-                          shortlist: List[Offer],
-                          intent: Intent,
-                          regime: str) -> float:
-    """Calculate how much the LLM earns under the given monetisation regime."""
-    if regime == "neutral" or chosen is None:
+def _compute_llm_payment(clicked:       Optional[Offer],
+                          purchased:    bool,
+                          intent:       Intent,
+                          regime:       str,
+                          payment_scale: Union[float, Dict] = 1.0) -> float:
+    """LLM earnings under the given regime, scaled by payment_scale."""
+    if regime == "neutral" or clicked is None or payment_scale == 0.0:
         return 0.0
 
     budgets = {
@@ -114,22 +144,28 @@ def _compute_llm_payment(chosen: Optional[Offer],
         "cpfi": config.LLM_SPONSORSHIP_CPFI,
     }
     rate_map = budgets.get(regime, {})
-    rate     = rate_map.get(chosen.platform_name, 0.0)
+    rate     = rate_map.get(clicked.platform_name, 0.0) * _payment_scale_for_offer(
+        payment_scale, clicked
+    )
 
     if regime == "cpc":
-        # Pay per click-through (treat any shown offer as potential click; here per purchase)
         return rate
-
     elif regime == "cpa":
-        # Pay per completed order
-        return rate
-
+        return rate if purchased else 0.0
     elif regime == "cpfi":
-        # Pay only if intent fulfilled
-        fi = intent_fulfilment(chosen, intent)
-        return rate * fi
+        return rate * intent_fulfilment(clicked, intent) if purchased else 0.0
 
     return 0.0
+
+
+def _payment_scale_for_offer(payment_scale: Union[float, Dict],
+                             offer: Offer) -> float:
+    if isinstance(payment_scale, dict):
+        return float(
+            payment_scale.get(offer.platform_id,
+                              payment_scale.get(offer.platform_name, 0.0))
+        )
+    return float(payment_scale)
 
 
 # ── Record builder ─────────────────────────────────────────────────────────────
@@ -143,8 +179,16 @@ def _build_record(consumer:    Consumer,
                   regime:      str,
                   n_platforms: int,
                   shortlist_rel: float,
-                  rng:         np.random.Generator) -> OrderRecord:
+                  rng:         np.random.Generator,
+                  clicked_offer: Optional[Offer] = None,
+                  exposed_offers: Optional[List[Offer]] = None) -> OrderRecord:
+    exposed_offers = exposed_offers or []
+    exposed_restaurant_ids = sorted({o.restaurant_id for o in exposed_offers})
+    exposed_platform_ids = sorted({o.platform_id for o in exposed_offers})
+
     if chosen is None:
+        clicked = clicked_offer is not None
+        payer_platform_id = clicked_offer.platform_id if llm_pay > 0.0 and clicked_offer else None
         return OrderRecord(
             consumer_id=consumer.consumer_id,
             restaurant_id=None, platform_id=None,
@@ -153,8 +197,13 @@ def _build_record(consumer:    Consumer,
             total_price=0.0, delivery_time=0,
             intent_fulfilment=0.0, consumer_utility=utility,
             restaurant_profit=0.0, platform_commission=0.0,
-            platform_delivery_fee=0.0, platform_net=0.0,
-            llm_payment=0.0,
+            platform_delivery_fee=0.0, platform_net=-llm_pay,
+            llm_payment=llm_pay,
+            clicked=clicked,
+            clicked_platform_id=clicked_offer.platform_id if clicked_offer else None,
+            payer_platform_id=payer_platform_id,
+            exposed_restaurant_ids=exposed_restaurant_ids,
+            exposed_platform_ids=exposed_platform_ids,
             world=world, regime=regime,
             n_platforms_checked=n_platforms,
             shortlist_relevance=shortlist_rel,
@@ -169,7 +218,7 @@ def _build_record(consumer:    Consumer,
     platform_net    = commission + delivery_rev - subsidy_spend - llm_pay
 
     rest_profit     = (chosen.menu_price
-                       - chosen.menu_price * config.RESTAURANT_COST_RATIO_RANGE[0]  # approx
+                       - chosen.menu_price * chosen.cost_ratio
                        - commission)
     fi              = intent_fulfilment(chosen, intent)
 
@@ -183,6 +232,11 @@ def _build_record(consumer:    Consumer,
         restaurant_profit=rest_profit, platform_commission=commission,
         platform_delivery_fee=delivery_rev, platform_net=platform_net,
         llm_payment=llm_pay,
+        clicked=clicked_offer is not None,
+        clicked_platform_id=clicked_offer.platform_id if clicked_offer else None,
+        payer_platform_id=chosen.platform_id if llm_pay > 0.0 else None,
+        exposed_restaurant_ids=exposed_restaurant_ids,
+        exposed_platform_ids=exposed_platform_ids,
         world=world, regime=regime,
         n_platforms_checked=n_platforms,
         shortlist_relevance=shortlist_rel,
@@ -191,13 +245,15 @@ def _build_record(consumer:    Consumer,
 
 # ── Main simulation run ────────────────────────────────────────────────────────
 
-def run_simulation(world:   str  = "no_llm",
-                   regime:  str  = "neutral",
-                   seed:    int  = None,
-                   verbose: bool = False) -> List[OrderRecord]:
+def run_simulation(world:          str   = "no_llm",
+                   regime:         str   = "neutral",
+                   seed:           int   = None,
+                   verbose:        bool  = False,
+                   payment_scale:  Union[float, Dict] = 1.0) -> List[OrderRecord]:
     """
     Run one full simulation pass (N_CONSUMERS consumers) in the given world/regime.
-    Returns a list of OrderRecord objects.
+    payment_scale: scales LLM payments without affecting routing bias (used for
+    two-pass WTP calibration — set to 0.0 to measure gross platform surplus).
     """
     seed = seed if seed is not None else config.SEED
     rng  = np.random.default_rng(seed)
@@ -214,7 +270,8 @@ def run_simulation(world:   str  = "no_llm",
         if world == "no_llm":
             rec = _no_llm_session(consumer, offers, platforms, intent, rng)
         else:
-            rec = _llm_session(consumer, offers, platforms, intent, regime, rng)
+            rec = _llm_session(consumer, offers, platforms, intent, regime, rng,
+                               payment_scale=payment_scale)
 
         records.append(rec)
 

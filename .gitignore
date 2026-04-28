@@ -7,3 +7,4 @@ results_*.csv
 attribution_results.csv
 *.egg-info/
 .env
+~$*

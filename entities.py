@@ -63,6 +63,7 @@ class Offer:
     delivery_fee:     float
     delivery_time:    int          # total minutes (prep + platform logistics)
     quality:          float
+    cost_ratio:       float        # restaurant production cost as fraction of menu price
     promo_discount:   float        # $ discount funded by platform/restaurant promo
     sponsored_boost:  float        # internal platform ad boost [0–1]
     platform_name:    str
@@ -132,7 +133,16 @@ def build_restaurants(platforms: List[Platform], rng: np.random.Generator) -> Li
         cuisine   = rng.choice(config.CUISINES)
         raw_q     = float(rng.uniform(*config.RESTAURANT_QUALITY_RANGE))
         quality   = round(raw_q * 2) / 2   # snap to nearest 0.5-star (e.g. 3.5 ★, 4.0 ★)
-        price     = float(rng.uniform(*config.RESTAURANT_PRICE_RANGE))
+
+        # Price positively correlated with quality (ρ ≈ 0.5): better restaurants charge
+        # more on average, but there's substantial overlap — a great cheap find exists.
+        # noise_scale = 0.50 × range gives ρ ≈ 0.50.
+        q_pct  = (raw_q - config.RESTAURANT_QUALITY_RANGE[0]) / (
+                  config.RESTAURANT_QUALITY_RANGE[1] - config.RESTAURANT_QUALITY_RANGE[0])
+        p_lo, p_hi = config.RESTAURANT_PRICE_RANGE
+        price_center = p_lo + q_pct * (p_hi - p_lo)
+        price_noise  = float(rng.normal(0, (p_hi - p_lo) * 0.50))
+        price = float(np.clip(price_center + price_noise, p_lo, p_hi))
         prep      = int(rng.integers(*config.RESTAURANT_PREP_TIME_RANGE))
         cost_rat  = float(rng.uniform(*config.RESTAURANT_COST_RATIO_RANGE))
 
@@ -181,6 +191,7 @@ def build_offers(restaurants: List[Restaurant],
                 delivery_fee=dfee,
                 delivery_time=dtime,
                 quality=r.quality,
+                cost_ratio=r.cost_ratio,
                 promo_discount=promo_d,
                 sponsored_boost=sponsored,
                 platform_name=plat.name,

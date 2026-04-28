@@ -101,6 +101,7 @@ def run_attribution(n_consumers:  int = 30,
                 delivery_fee=o.delivery_fee,
                 delivery_time=o.delivery_time,
                 quality=o.quality,
+                cost_ratio=o.cost_ratio,
                 promo_discount=0.0,          # <-- zero out promos
                 sponsored_boost=o.sponsored_boost,
                 platform_name=o.platform_name,

@@ -16,23 +16,32 @@ from entities import Consumer, Intent, Offer
 def intent_fulfilment(offer: Offer, intent: Intent) -> float:
     """
     Graded score 0–1: how well an offer satisfies the consumer's stated intent.
-    1.0 = perfect match; penalised for wrong cuisine, over-budget, over-time.
+    Penalised for wrong cuisine (hard zero), over-budget, over-time, and low quality.
+    Quality scales from 0.60 (2★) to 1.00 (5★) — platform-promoted sponsored
+    restaurants may be lower-rated than what an intent-matched LLM would surface.
     """
     score = 1.0
 
-    # Cuisine
+    # Cuisine: hard zero for mismatch
     if offer.cuisine != intent.cuisine:
-        score *= 0.0    # hard zero for wrong cuisine (v1 strict)
+        score *= 0.0
 
-    # Price
+    # Price: graded penalty for overage relative to budget
     if offer.total_price > intent.budget:
         over = offer.total_price - intent.budget
         score *= max(0.0, 1.0 - config.INTENT_PRICE_PENALTY * over / intent.budget)
 
-    # Time
+    # Time: graded penalty per minute over tolerance
     if offer.delivery_time > intent.max_time:
         over = offer.delivery_time - intent.max_time
         score *= max(0.0, 1.0 - config.INTENT_TIME_PENALTY * over)
+
+    # Quality: scales fi from (1 - INTENT_QUALITY_WEIGHT) at min stars to 1.0 at max stars
+    q_min = config.RESTAURANT_QUALITY_RANGE[0]
+    q_max = config.RESTAURANT_QUALITY_RANGE[1]
+    q_norm = (offer.quality - q_min) / (q_max - q_min)   # 0.0 at 2★, 1.0 at 5★
+    quality_factor = (1.0 - config.INTENT_QUALITY_WEIGHT) + config.INTENT_QUALITY_WEIGHT * q_norm
+    score *= quality_factor
 
     return float(score)
 
@@ -124,3 +133,53 @@ def choose_offer(consumer:     Consumer,
 
     chosen = offers[idx]
     return chosen, utilities[idx]
+
+
+def click_offer(consumer: Consumer,
+                offers:   List[Offer],
+                intent:   Intent,
+                rng:      np.random.Generator) -> Tuple[Optional[Offer], float]:
+    """
+    First-stage LLM interaction: consumer clicks/selects one recommendation from
+    the shortlist, or ignores the shortlist. This is less committal than purchase.
+    """
+    if not offers:
+        return None, config.NO_CLICK_UTILITY
+
+    utilities = [
+        consumer_utility(consumer, o, intent, from_llm=True, rng=rng) for o in offers
+    ]
+    utilities.append(config.NO_CLICK_UTILITY)
+
+    if config.CHOICE_MODEL == "logit":
+        idx = logit_choice(utilities, rng)
+    else:
+        idx = deterministic_choice(utilities)
+
+    if idx == len(offers):
+        return None, config.NO_CLICK_UTILITY
+
+    clicked = offers[idx]
+    return clicked, utilities[idx]
+
+
+def purchase_clicked_offer(consumer: Consumer,
+                           offer:    Offer,
+                           intent:   Intent,
+                           rng:      np.random.Generator,
+                           utility:  Optional[float] = None) -> Tuple[bool, float]:
+    """
+    Second-stage LLM interaction: after clicking into one recommendation, decide
+    whether to complete the order. CPA/CPFI bill only if this stage succeeds.
+    """
+    utility = (
+        utility if utility is not None
+        else consumer_utility(consumer, offer, intent, from_llm=True, rng=rng)
+    )
+
+    if config.CHOICE_MODEL == "logit":
+        idx = logit_choice([utility, config.POST_CLICK_NO_PURCHASE_UTILITY], rng)
+        return idx == 0, utility if idx == 0 else config.POST_CLICK_NO_PURCHASE_UTILITY
+
+    purchased = utility >= config.POST_CLICK_NO_PURCHASE_UTILITY
+    return purchased, utility if purchased else config.POST_CLICK_NO_PURCHASE_UTILITY

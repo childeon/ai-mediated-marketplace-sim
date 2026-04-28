@@ -59,12 +59,17 @@ def compute_metrics(records: List[OrderRecord]) -> Dict[str, Any]:
     if n_orders > 0:
         rest_orders  = out.groupby("restaurant_id").size()
         rest_profit  = out.groupby("restaurant_id")["restaurant_profit"].sum()
-        rest_exp     = df[df["restaurant_id"].notna()].groupby("restaurant_id").size()
-        exposure_arr = rest_exp.values.astype(float)
         order_arr    = rest_orders.values.astype(float)
     else:
-        exposure_arr = np.zeros(1)
         order_arr    = np.zeros(1)
+
+    if "exposed_restaurant_ids" in df:
+        exposed = df[["exposed_restaurant_ids"]].explode("exposed_restaurant_ids")
+        exposed = exposed[exposed["exposed_restaurant_ids"].notna()]
+        rest_exp = exposed.groupby("exposed_restaurant_ids").size()
+        exposure_arr = rest_exp.values.astype(float) if len(rest_exp) else np.zeros(1)
+    else:
+        exposure_arr = order_arr
 
     restaurant = {
         "total_orders":             int(n_orders),
@@ -76,7 +81,15 @@ def compute_metrics(records: List[OrderRecord]) -> Dict[str, Any]:
 
     # ── Platform-side ─────────────────────────────────────────────────────────
     plat_orders  = out.groupby("platform_id").size() if n_orders else pd.Series(dtype=int)
-    plat_rev     = out.groupby("platform_id")["platform_net"].sum() if n_orders else pd.Series(dtype=float)
+    billable     = df[df["platform_net"] != 0.0]
+    if len(billable):
+        payer_key = billable["payer_platform_id"].where(
+            billable["payer_platform_id"].notna(),
+            billable["platform_id"],
+        ).astype(int)
+        plat_rev = billable.groupby(payer_key)["platform_net"].sum()
+    else:
+        plat_rev = pd.Series(dtype=float)
     plat_comm    = out.groupby("platform_id")["platform_commission"].sum() if n_orders else pd.Series(dtype=float)
     total_plat_orders = plat_orders.sum() if len(plat_orders) else 0
 
@@ -92,6 +105,13 @@ def compute_metrics(records: List[OrderRecord]) -> Dict[str, Any]:
     llm = {
         "total_llm_revenue":        float(df["llm_payment"].sum()),
         "avg_llm_revenue_per_order": float(out["llm_payment"].mean()) if n_orders else 0.0,
+        "click_through_rate":       float(df["clicked"].mean()) if "clicked" in df else 0.0,
+        "llm_revenue_by_payer_id":  (
+            df[df["payer_platform_id"].notna()]
+            .groupby("payer_platform_id")["llm_payment"].sum()
+            .to_dict()
+            if "payer_platform_id" in df else {}
+        ),
         "avg_shortlist_relevance":  consumer["avg_shortlist_relevance"],
         "conversion_from_llm":      conv_rate,
     }
@@ -152,6 +172,7 @@ def print_metrics(label: str, m: Dict[str, Any]):
     print(f"\n[LLM]")
     print(f"  Total LLM revenue:        ${l['total_llm_revenue']:.2f}")
     print(f"  Avg LLM rev / order:      ${l['avg_llm_revenue_per_order']:.2f}")
+    print(f"  Click-through rate:       {l['click_through_rate']:.3f}")
 
     s = m["system"]
     print(f"\n[System]")

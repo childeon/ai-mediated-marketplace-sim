@@ -48,6 +48,7 @@ def print_summary_table(label: str, df: pd.DataFrame):
         "restaurant.avg_restaurant_profit",
         "platform.platform_net_revenue",
         "llm.total_llm_revenue",
+        "llm.click_through_rate",
     ] if c in df.columns]
     print(f"\n{'─'*70}")
     print(f" Summary: {label}")
